@@ -41,6 +41,10 @@ pub enum AmmError {
     InsufficientBalance,
     #[msg("Zero balance.")]
     ZeroBalance,
+    #[msg("Treasury Invalid")]
+    InvalidTreasury,
+    #[msg("Treasury account does not match the pool config.")]
+    InvalidTreasuryAccount,
 }
 
 impl From<CurveError> for AmmError {

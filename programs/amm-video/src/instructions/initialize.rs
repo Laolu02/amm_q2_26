@@ -4,7 +4,7 @@ use anchor_spl::{
     token::{Mint, Token, TokenAccount},
 };
 
-use crate::state::Config;
+use crate::{state::Config, error::AmmError};
 
 #[derive(Accounts)]
 #[instruction(seed: u64)]
@@ -55,11 +55,16 @@ impl<'info> Initialize<'info> {
         seed: u64,
         fee: u16,
         authority: Option<Pubkey>,
+        treasury: Pubkey,
         bumps: InitializeBumps,
     ) -> Result<()> {
+        require!(fee< 10_000, AmmError::InvalidFee);
+        require!(treasury != Pubkey::default(), AmmError::InvalidTreasury);
+        require!(self.mint_x.key() > self.mint_y.key(), AmmError::InvalidToken);
         self.config.set_inner(Config {
             seed,
             authority,
+            treasury,
             mint_x: self.mint_x.key(),
             mint_y: self.mint_y.key(),
             fee,

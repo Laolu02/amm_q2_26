@@ -9,7 +9,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("6KoUjko5kqLHaF31gdWGBihf8Pw8dUNte2hBpBEJveVe");
+declare_id!("5yuWvmuzj7skjt3k3NU8NYTFWYVsQp2gZ2rpQ3mbDhku");
 
 #[program]
 pub mod amm_video {
@@ -19,9 +19,10 @@ pub mod amm_video {
         ctx: Context<Initialize>,
         seed: u64,
         fee: u16,
+        treasury: Pubkey,
         authority: Option<Pubkey>,
     ) -> Result<()> {
-        ctx.accounts.init(seed, fee, authority, ctx.bumps)
+        ctx.accounts.init(seed, fee, authority, treasury, ctx.bumps)
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64, max_x: u64, max_y: u64) -> Result<()> {
@@ -34,5 +35,17 @@ pub mod amm_video {
 
     pub fn swap(ctx: Context<Swap>, is_x: bool, amount_in: u64, min_amount_out: u64) -> Result<()> {
         ctx.accounts.swap(is_x, amount_in, min_amount_out)
+    }
+
+    pub fn update_fee(ctx: Context<UpdateFee>, new_fee: u16) -> Result<()> {
+        ctx.accounts.update_fee(new_fee)
+    }
+
+    pub fn withdraw_treasury(ctx: Context<Treasury>, is_x: bool, amount: u64) -> Result<()> {
+        ctx.accounts.withdraw_treasury(is_x, amount)
+    }
+
+    pub fn burn_treasury(ctx: Context<Treasury>, amount: u64) -> Result<()> {
+        ctx.accounts.burn_tokens( amount)
     }
 }

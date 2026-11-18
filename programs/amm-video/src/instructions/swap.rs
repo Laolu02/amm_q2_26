@@ -16,10 +16,13 @@ pub struct Swap<'info> {
     #[account(
         has_one = mint_x,
         has_one = mint_y,
+        constraint = config.treasury == treasury.key() @AmmError::InvalidTreasuryAccount,
         seeds = [b"config", config.seed.to_le_bytes().as_ref()],
         bump = config.config_bump
     )]
     pub config: Account<'info, Config>,
+    /// CHECK: The treasury address is validated against config.treasury.
+    pub treasury: UncheckedAccount<'info>,
     #[account(
         seeds = [b"lp", config.key().as_ref()],
         bump = config.lp_bump,
@@ -49,6 +52,20 @@ pub struct Swap<'info> {
         associated_token::authority = user,
     )]
     pub user_y: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = mint_x,
+        associated_token::authority = treasury,
+    )]
+    pub treasury_x: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = mint_y,
+        associated_token::authority = treasury,
+    )]
+    pub treasury_y: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -56,7 +73,10 @@ pub struct Swap<'info> {
 
 impl<'info> Swap<'info> {
     pub fn swap(&mut self, is_x: bool, amount: u64, min: u64) -> Result<()> {
+        require!(!self.config.locked, AmmError::PoolLocked);
         require!(amount > 0, AmmError::InvalidAmount);
+        require!(self.config.fee < 10_000, AmmError::InvalidFee);
+
         let mut curve = ConstantProduct::init(
             self.vault_x.amount,
             self.vault_y.amount,
@@ -75,7 +95,13 @@ impl<'info> Swap<'info> {
             .swap(p, amount, min)
             .map_err(|_| AmmError::SlippageExceeded)?;
 
-        self.deposit_tokens(is_x, swap_result.deposit)?;
+        let net_deposit = swap_result
+            .deposit
+            .checked_sub(swap_result.fee)
+            .ok_or(AmmError::Underflow)?;
+
+        self.deposit_tokens(is_x, net_deposit)?;
+        self.collect_fee(is_x, swap_result.fee)?;
         self.withdraw_tokens(is_x, swap_result.withdraw)
     }
 
@@ -133,4 +159,36 @@ impl<'info> Swap<'info> {
             amount,
         )
     }
+
+
+    pub fn collect_fee(&mut self, is_x: bool, amount: u64, ) -> Result<()> {
+        if amount == 0 {
+            return Ok(());
+        }
+
+        let (from, to) = if is_x {
+            (
+                self.user_x.to_account_info(),
+                self.treasury_x.to_account_info(),
+            )
+          } else {
+            (
+                self.user_y.to_account_info(),
+                self.treasury_y.to_account_info(),
+            )
+        };
+
+        transfer(
+            CpiContext::new(
+                self.token_program.key(),
+                Transfer {
+                    from,
+                    to,
+                    authority: self.user.to_account_info(),
+                },
+            ),
+            amount,
+        )
+    }
+
 }
